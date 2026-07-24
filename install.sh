@@ -9,16 +9,30 @@ BASE="${GIGGA_BASE:-https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}
 AGENTS=(
   gigga
   gigga-spec
-  gigga-attacker
-  gigga-reconciler
   gigga-test-author
   gigga-builder
   gigga-merge
   gigga-judge-fidelity
+  gigga-checker
 )
 
 usage() {
-  echo "usage: install.sh [--global]" >&2
+  cat >&2 <<'EOF'
+usage: install.sh [--global]
+
+Environment variables for model customization:
+  GIGGA_MODEL              Default model for ALL agents
+  GIGGA_MODEL_ORCHESTRATOR Model for the orchestrator (gigga)
+  GIGGA_MODEL_SPEC         Model for the planner (gigga-spec)
+  GIGGA_MODEL_TEST_AUTHOR  Model for the test author (gigga-test-author)
+  GIGGA_MODEL_BUILDER      Model for the builder (gigga-builder)
+  GIGGA_MODEL_MERGE        Model for the integrator (gigga-merge)
+  GIGGA_MODEL_JUDGE        Model for the judge (gigga-judge-fidelity)
+  GIGGA_MODEL_CHECKER      Model for the quick-fix checker (gigga-checker)
+
+Per-agent vars override GIGGA_MODEL. Example:
+  GIGGA_MODEL=openai/gpt-5.2 GIGGA_MODEL_JUDGE=anthropic/claude-sonnet-4-20250514 install.sh
+EOF
   exit 2
 }
 
@@ -36,7 +50,6 @@ if [ "$GLOBAL" -eq 1 ]; then
 else
   AGENT_DIR=".opencode/agents"
 fi
-# gigga.md hardcodes the scheduler at ~/.config/opencode/gigga/scheduler.py
 SCHEDULER_DIR="$HOME/.config/opencode/gigga"
 
 mkdir -p "$AGENT_DIR" "$SCHEDULER_DIR"
@@ -50,12 +63,31 @@ fetch() {
   fi
 }
 
+model_for() {
+  local name="$1"
+  case "$name" in
+    gigga)              echo "${GIGGA_MODEL_ORCHESTRATOR:-${GIGGA_MODEL:-}}" ;;
+    gigga-spec)         echo "${GIGGA_MODEL_SPEC:-${GIGGA_MODEL:-}}" ;;
+    gigga-test-author)  echo "${GIGGA_MODEL_TEST_AUTHOR:-${GIGGA_MODEL:-}}" ;;
+    gigga-builder)      echo "${GIGGA_MODEL_BUILDER:-${GIGGA_MODEL:-}}" ;;
+    gigga-merge)        echo "${GIGGA_MODEL_MERGE:-${GIGGA_MODEL:-}}" ;;
+    gigga-judge-fidelity) echo "${GIGGA_MODEL_JUDGE:-${GIGGA_MODEL:-}}" ;;
+    gigga-checker)      echo "${GIGGA_MODEL_CHECKER:-${GIGGA_MODEL:-}}" ;;
+    *)                  echo "${GIGGA_MODEL:-}" ;;
+  esac
+}
+
 echo "Installing GIGGA agents into $AGENT_DIR"
 for name in "${AGENTS[@]}"; do
   fetch "$BASE/$name.md" "$AGENT_DIR/$name.md"
+  model="$(model_for "$name")"
+  if [ -n "$model" ]; then
+    sed -i "s|^model:.*|model: $model|" "$AGENT_DIR/$name.md"
+    echo "  $name -> $model"
+  fi
 done
 
 echo "Installing scheduler into $SCHEDULER_DIR"
 fetch "$BASE/scheduler.py" "$SCHEDULER_DIR/scheduler.py"
 
-echo "✓ ${#AGENTS[@]} agents ready"
+echo "done: ${#AGENTS[@]} agents ready"

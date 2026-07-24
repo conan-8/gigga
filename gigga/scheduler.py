@@ -5,17 +5,19 @@ Serial pipeline. One task at a time. All state in a directory on disk.
 Append-only journal (JSONL) so it resumes after a crash.
 
 Usage:
-    scheduler.py init   <state_dir> <request_file> [--fastrack]
-    scheduler.py next   <state_dir>
-    scheduler.py record <state_dir> <event_json_file>
-    scheduler.py status <state_dir>
-    scheduler.py amend  <state_dir> <amendment_json_file>
-    scheduler.py revive <state_dir> <to_phase>
+    scheduler.py init       <state_dir> <request_file> [--fastrack]
+    scheduler.py next       <state_dir>
+    scheduler.py record     <state_dir> <event_json_file>
+    scheduler.py status     <state_dir>
+    scheduler.py amend      <state_dir> <amendment_json_file>
+    scheduler.py revive     <state_dir> <to_phase>
+    scheduler.py mergecheck <state_dir> [--apply]
 """
 
 import hashlib
 import json
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -52,19 +54,14 @@ ESCALATION_LEVELS = ["initial", "retry", "rewrite", "hard", "quarantine"]
 AGENTS = {
     "FASTTRACK": "gigga-builder",
     "SPEC_DRAFT": "gigga-spec",
-    "SPEC_ATTACK": "gigga-attacker",
-    "SPEC_RECONCILE": "gigga-reconciler",
+    "SPEC_ATTACK": None,
+    "SPEC_RECONCILE": "gigga-spec",
     "SPEC_FREEZE": None,
-    "TASK_PLAN": "gigga-spec",
+    "TASK_PLAN": None,
     "TASK_TEST_AUTHOR": "gigga-test-author",
-    "TASK_REF_IMPL": "gigga-ref-impl",
     "TASK_BUILD": "gigga-builder",
     "TASK_GATES": None,
-    "TASK_FUZZ": "gigga-ref-impl",
-    "TASK_MUTATE": "gigga-mutator",
-    "TASK_AUDIT": "gigga-auditor",
     "TASK_MERGE": None,
-    "JUDGE_PROMO": "gigga-judge-promo",
     "JUDGE_FIDELITY": "gigga-judge-fidelity",
 }
 
@@ -275,19 +272,7 @@ def cmd_init(state_dir, request_file, fastrack=False):
     print(json.dumps({"ok": True, "run_id": run_id, "phase": state["phase"], "fastrack": fastrack, "state_dir": str(sd)}))
 
 
-def cmd_next(state_dir):
-    state = load_state(state_dir)
-    if state is None:
-        state = replay_journal(state_dir)
-    if state is None:
-        print(json.dumps({"error": "no state found; run init first"}))
-        sys.exit(1)
-
-    halt = check_halt_conditions(state)
-    if halt and state["phase"] not in ("DONE", "HALT", "QUARANTINE"):
-        append_journal(state_dir, {"type": "halt", "reason": halt})
-        state = replay_journal(state_dir)
-
+def build_next_result(state):
     phase = state["phase"]
     agent = AGENTS.get(phase)
     escalation = state["escalation"]
@@ -299,13 +284,7 @@ def cmd_next(state_dir):
         task_id = state["tasks"][idx].get("id", f"task-{idx}")
         task_info = state["tasks"][idx]
 
-    if phase == "TASK_GATES":
-        agent = None
-
-    if phase == "TASK_MERGE":
-        agent = None
-
-    if phase == "SPEC_FREEZE":
+    if phase in ("TASK_GATES", "TASK_MERGE", "SPEC_FREEZE"):
         agent = None
 
     if escalation == "hard" and phase == "TASK_BUILD":
@@ -332,7 +311,23 @@ def cmd_next(state_dir):
         result["halt_reason"] = state.get("halt_reason", "unknown")
         result["autopsy"] = build_autopsy(state)
 
-    print(json.dumps(result, indent=2))
+    return result
+
+
+def cmd_next(state_dir):
+    state = load_state(state_dir)
+    if state is None:
+        state = replay_journal(state_dir)
+    if state is None:
+        print(json.dumps({"error": "no state found; run init first"}))
+        sys.exit(1)
+
+    halt = check_halt_conditions(state)
+    if halt and state["phase"] not in ("DONE", "HALT", "QUARANTINE"):
+        append_journal(state_dir, {"type": "halt", "reason": halt})
+        state = replay_journal(state_dir)
+
+    print(json.dumps(build_next_result(state), indent=2))
 
 
 def build_autopsy(state):
@@ -372,7 +367,10 @@ def cmd_record(state_dir, event_file):
         append_journal(state_dir, {"type": "halt", "reason": halt})
         state = replay_journal(state_dir)
 
-    print(json.dumps({"ok": True, "phase": state["phase"], "seq": event.get("seq")}))
+    result = build_next_result(state)
+    result["ok"] = True
+    result["seq"] = event.get("seq")
+    print(json.dumps(result, indent=2))
 
 
 def cmd_status(state_dir):
@@ -436,6 +434,71 @@ def cmd_amend(state_dir, amendment_file):
     }))
 
 
+def cmd_mergecheck(state_dir, apply=False):
+    parts_dir = Path(state_dir) / "parts"
+    if not parts_dir.exists():
+        print(json.dumps({"error": "no parts/ directory"}))
+        sys.exit(1)
+
+    part_ids = sorted(
+        d.name for d in parts_dir.iterdir()
+        if d.is_dir() and not d.name.startswith(".")
+    )
+    if not part_ids:
+        print(json.dumps({"error": "no parts found"}))
+        sys.exit(1)
+
+    file_map = {}
+    conflicts = []
+    for pid in part_ids:
+        pdir = parts_dir / pid
+        for f in pdir.rglob("*"):
+            if f.is_file() and not f.name.startswith("."):
+                rel = str(f.relative_to(pdir))
+                if rel in file_map:
+                    conflicts.append({"file": rel, "parts": [file_map[rel], pid]})
+                else:
+                    file_map[rel] = pid
+
+    for pid in part_ids:
+        pdir = parts_dir / pid
+        for f in pdir.rglob("*"):
+            if f.is_file() and not f.name.startswith("."):
+                try:
+                    content = f.read_text(errors="ignore")
+                except OSError:
+                    continue
+                for other in part_ids:
+                    if other != pid and (f"parts/{other}" in content or f"/{other}/" in content):
+                        conflicts.append({
+                            "file": str(f.relative_to(pdir)),
+                            "part": pid,
+                            "references": other,
+                        })
+
+    mergeable = len(conflicts) == 0
+    applied = False
+
+    if apply and mergeable:
+        merged = Path(state_dir) / "merged"
+        merged.mkdir(exist_ok=True)
+        for pid in part_ids:
+            pdir = parts_dir / pid
+            for f in pdir.rglob("*"):
+                if f.is_file():
+                    dest = merged / f.relative_to(pdir)
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(f, dest)
+        applied = True
+
+    print(json.dumps({
+        "mergeable": mergeable,
+        "conflicts": conflicts,
+        "parts": part_ids,
+        "applied": applied,
+    }, indent=2))
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -469,6 +532,9 @@ def main():
             print("usage: scheduler.py revive <state_dir> <to_phase>")
             sys.exit(1)
         cmd_revive(state_dir, sys.argv[3])
+    elif cmd == "mergecheck":
+        apply_flag = "--apply" in sys.argv[3:]
+        cmd_mergecheck(state_dir, apply=apply_flag)
     else:
         print(f"unknown command: {cmd}")
         sys.exit(1)
