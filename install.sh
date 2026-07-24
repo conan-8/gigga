@@ -14,6 +14,7 @@ AGENTS=(
   gigga-merge
   gigga-judge-fidelity
   gigga-checker
+  gigga-config
 )
 
 usage() {
@@ -29,6 +30,7 @@ Environment variables for model customization:
   GIGGA_MODEL_MERGE        Model for the integrator (gigga-merge)
   GIGGA_MODEL_JUDGE        Model for the judge (gigga-judge-fidelity)
   GIGGA_MODEL_CHECKER      Model for the quick-fix checker (gigga-checker)
+  GIGGA_MODEL_CONFIG       Model for the configurator (gigga-config)
 
 Per-agent vars override GIGGA_MODEL. Example:
   GIGGA_MODEL=openai/gpt-5.2 GIGGA_MODEL_JUDGE=anthropic/claude-sonnet-4-20250514 install.sh
@@ -73,6 +75,7 @@ model_for() {
     gigga-merge)        echo "${GIGGA_MODEL_MERGE:-${GIGGA_MODEL:-}}" ;;
     gigga-judge-fidelity) echo "${GIGGA_MODEL_JUDGE:-${GIGGA_MODEL:-}}" ;;
     gigga-checker)      echo "${GIGGA_MODEL_CHECKER:-${GIGGA_MODEL:-}}" ;;
+    gigga-config)       echo "${GIGGA_MODEL_CONFIG:-${GIGGA_MODEL:-}}" ;;
     *)                  echo "${GIGGA_MODEL:-}" ;;
   esac
 }

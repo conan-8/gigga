@@ -35,9 +35,10 @@ re-reconciles, re-locks tests, and rebuilds only what changed.
 | `gigga-merge.md` | Joins the finished parts and fixes the seams (skipped when parts are disjoint). |
 | `gigga-judge-fidelity.md` | Independent reject-only reviewer. |
 | `gigga-checker.md` | Quick-fix sanity checker (used only in post-HALT recovery). |
+| `gigga-config.md` | Interactive model configurator. Switch to it with Tab to change agent models. |
 | `scheduler.py` | The plain-code state machine the orchestrator drives. |
 
-The seven `.md` files are opencode agents; `scheduler.py` is the state machine they run against.
+The eight `.md` files are opencode agents; `scheduler.py` is the state machine they run against.
 
 ## Requirements
 
@@ -56,7 +57,7 @@ The seven `.md` files are opencode agents; `scheduler.py` is the state machine t
 Run this from the root of your project:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/{gigga,gigga-spec,gigga-test-author,gigga-builder,gigga-merge,gigga-judge-fidelity,gigga-checker}.md" -o ".opencode/agents/#1.md" --create-dirs && curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/scheduler.py" -o "$HOME/.config/opencode/gigga/scheduler.py" --create-dirs
+curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/{gigga,gigga-spec,gigga-test-author,gigga-builder,gigga-merge,gigga-judge-fidelity,gigga-checker,gigga-config}.md" -o ".opencode/agents/#1.md" --create-dirs && curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/scheduler.py" -o "$HOME/.config/opencode/gigga/scheduler.py" --create-dirs
 ```
 
 ### One-line install (global)
@@ -64,7 +65,7 @@ curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/{gigga,gi
 To make GIGGA available in every project instead:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/{gigga,gigga-spec,gigga-test-author,gigga-builder,gigga-merge,gigga-judge-fidelity,gigga-checker}.md" -o "$HOME/.config/opencode/agents/#1.md" --create-dirs && curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/scheduler.py" -o "$HOME/.config/opencode/gigga/scheduler.py" --create-dirs
+curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/{gigga,gigga-spec,gigga-test-author,gigga-builder,gigga-merge,gigga-judge-fidelity,gigga-checker,gigga-config}.md" -o "$HOME/.config/opencode/agents/#1.md" --create-dirs && curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/gigga/scheduler.py" -o "$HOME/.config/opencode/gigga/scheduler.py" --create-dirs
 ```
 
 ### Using install.sh (with model customization)
@@ -95,6 +96,7 @@ curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/install.sh" | G
 | `GIGGA_MODEL_MERGE` | `gigga-merge` (integrator) |
 | `GIGGA_MODEL_JUDGE` | `gigga-judge-fidelity` |
 | `GIGGA_MODEL_CHECKER` | `gigga-checker` |
+| `GIGGA_MODEL_CONFIG` | `gigga-config` (configurator) |
 
 Per-agent vars override `GIGGA_MODEL`.
 
@@ -102,7 +104,7 @@ Per-agent vars override `GIGGA_MODEL`.
 
 Copy the files yourself:
 
-1. Copy the seven `gigga*.md` files from [`gigga/`](gigga/) into your project's `.opencode/agents/`
+1. Copy the eight `gigga*.md` files from [`gigga/`](gigga/) into your project's `.opencode/agents/`
    (or `~/.config/opencode/agents/` for global use).
 2. Copy [`gigga/scheduler.py`](gigga/scheduler.py) into `~/.config/opencode/gigga/`.
 
@@ -118,3 +120,8 @@ cp gigga/scheduler.py ~/.config/opencode/gigga/
 ## Usage
 
 Restart opencode, press **Tab** until you reach the `gigga` agent, and give it a request.
+
+## Changing models after install
+
+Switch to the `gigga-config` agent with **Tab**. It shows every GIGGA agent's current
+model and lets you pick new ones interactively. Restart opencode after changing models.
