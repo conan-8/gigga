@@ -10,6 +10,7 @@ Usage:
     scheduler.py record <state_dir> <event_json_file>
     scheduler.py status <state_dir>
     scheduler.py amend  <state_dir> <amendment_json_file>
+    scheduler.py revive <state_dir> <to_phase>
 """
 
 import hashlib
@@ -208,6 +209,14 @@ def apply_event(state, event):
         state["attempts"] = 0
         return state
 
+    if etype == "revive":
+        state["phase"] = event["to_phase"]
+        state["escalation"] = "initial"
+        state["attempts"] = 0
+        state["no_progress_count"] = 0
+        state.pop("halt_reason", None)
+        return state
+
     if etype == "halt":
         state["phase"] = "HALT"
         state["halt_reason"] = event.get("reason", "unknown")
@@ -376,6 +385,27 @@ def cmd_status(state_dir):
     print(json.dumps(state, indent=2))
 
 
+def cmd_revive(state_dir, to_phase):
+    state = load_state(state_dir)
+    if state is None:
+        state = replay_journal(state_dir)
+    if state is None:
+        print(json.dumps({"error": "no state; run init first"}))
+        sys.exit(1)
+
+    if state["phase"] not in ("HALT", "QUARANTINE"):
+        print(json.dumps({"error": "not halted", "phase": state["phase"]}))
+        sys.exit(1)
+
+    if to_phase not in PHASES:
+        print(json.dumps({"error": f"unknown phase: {to_phase}"}))
+        sys.exit(1)
+
+    append_journal(state_dir, {"type": "revive", "to_phase": to_phase})
+    state = replay_journal(state_dir)
+    print(json.dumps({"ok": True, "phase": state["phase"]}))
+
+
 def cmd_amend(state_dir, amendment_file):
     state = load_state(state_dir)
     if state is None:
@@ -434,6 +464,11 @@ def main():
             print("usage: scheduler.py amend <state_dir> <amendment_json_file>")
             sys.exit(1)
         cmd_amend(state_dir, sys.argv[3])
+    elif cmd == "revive":
+        if len(sys.argv) < 4:
+            print("usage: scheduler.py revive <state_dir> <to_phase>")
+            sys.exit(1)
+        cmd_revive(state_dir, sys.argv[3])
     else:
         print(f"unknown command: {cmd}")
         sys.exit(1)
