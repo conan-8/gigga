@@ -5,7 +5,7 @@ Serial pipeline. One task at a time. All state in a directory on disk.
 Append-only journal (JSONL) so it resumes after a crash.
 
 Usage:
-    scheduler.py init   <state_dir> <request_file>
+    scheduler.py init   <state_dir> <request_file> [--fastrack]
     scheduler.py next   <state_dir>
     scheduler.py record <state_dir> <event_json_file>
     scheduler.py status <state_dir>
@@ -25,6 +25,7 @@ AMENDMENT_CAP = 3
 NO_PROGRESS_WINDOW = 6
 
 PHASES = [
+    "FASTTRACK",
     "SPEC_DRAFT",
     "SPEC_ATTACK",
     "SPEC_RECONCILE",
@@ -48,6 +49,7 @@ PHASES = [
 ESCALATION_LEVELS = ["initial", "retry", "rewrite", "hard", "quarantine"]
 
 AGENTS = {
+    "FASTTRACK": "gigga-builder",
     "SPEC_DRAFT": "gigga-spec",
     "SPEC_ATTACK": "gigga-attacker",
     "SPEC_RECONCILE": "gigga-reconciler",
@@ -140,7 +142,8 @@ def apply_event(state, event):
         return {
             "run_id": event["run_id"],
             "request": event["request"],
-            "phase": "SPEC_DRAFT",
+            "phase": "FASTTRACK" if event.get("fastrack") else "SPEC_DRAFT",
+            "fastrack": bool(event.get("fastrack")),
             "task_index": 0,
             "tasks": [],
             "spec_hash": None,
@@ -238,7 +241,7 @@ def escalate(state):
     return "quarantine"
 
 
-def cmd_init(state_dir, request_file):
+def cmd_init(state_dir, request_file, fastrack=False):
     sd = Path(state_dir)
     if (sd / "journal.jsonl").exists():
         print(json.dumps({"error": "state_dir already initialized", "state_dir": str(sd)}))
@@ -256,10 +259,11 @@ def cmd_init(state_dir, request_file):
         "type": "init",
         "run_id": run_id,
         "request": request,
+        "fastrack": fastrack,
     })
 
     state = replay_journal(state_dir)
-    print(json.dumps({"ok": True, "run_id": run_id, "phase": state["phase"], "state_dir": str(sd)}))
+    print(json.dumps({"ok": True, "run_id": run_id, "phase": state["phase"], "fastrack": fastrack, "state_dir": str(sd)}))
 
 
 def cmd_next(state_dir):
@@ -312,6 +316,7 @@ def cmd_next(state_dir):
         "spec_hash": state["spec_hash"],
         "run_id": state["run_id"],
         "request": state["request"],
+        "fastrack": state.get("fastrack", False),
     }
 
     if phase == "HALT":
@@ -334,6 +339,7 @@ def build_autopsy(state):
         "task_index": state["task_index"],
         "no_progress_count": state["no_progress_count"],
         "spec_hash": state["spec_hash"],
+        "fastrack": state.get("fastrack", False),
     }
 
 
@@ -410,9 +416,10 @@ def main():
 
     if cmd == "init":
         if len(sys.argv) < 4:
-            print("usage: scheduler.py init <state_dir> <request_file>")
+            print("usage: scheduler.py init <state_dir> <request_file> [--fastrack]")
             sys.exit(1)
-        cmd_init(state_dir, sys.argv[3])
+        fastrack = "--fastrack" in sys.argv[4:]
+        cmd_init(state_dir, sys.argv[3], fastrack=fastrack)
     elif cmd == "next":
         cmd_next(state_dir)
     elif cmd == "record":

@@ -3,7 +3,7 @@ description: GIGGA final judge. Checks the result against the original request a
 mode: subagent
 hidden: true
 color: "#FF0000"
-model: alibaba-token-plan/qwen3.8-max-preview
+model: zai-coding-plan/glm-5.2
 permission:
   read: allow
   edit: deny

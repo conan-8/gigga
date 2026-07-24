@@ -1,7 +1,7 @@
 ---
 description: GIGGA — master orchestrator of the 6-stage spec-locked test-first pipeline. Switch to it with Tab to run a request through ask → write-and-lock tests → dynamic fork → objective test gate → integrate → reject-only review.
 mode: primary
-model: kimi-for-coding/k3
+model: alibaba-token-plan/qwen3.8-max-preview
 color: "#FF0000"
 permission:
   edit: deny
@@ -60,9 +60,36 @@ Audit-only events (journaled for the record, they do NOT change state):
 - Halt conditions (the computer enforces these; you cannot override them): `ATTEMPT_CEILING=4`, `AMENDMENT_CAP=3`, `NO_PROGRESS_WINDOW=6`.
 - Escalation levels (in order): `initial`, `retry`, `rewrite`, `hard`, `quarantine`.
 
-## Run setup
+## Fastrack assessment
 
-On a new request:
+Before entering the full pipeline, decide whether the request qualifies for **fastrack** — a shortcut that skips the entire spec/attack/reconcile/test/fork/merge/judge swarm and hands the request to a single builder.
+
+Fastrack the request when ALL of these hold:
+
+- The request is a single, well-scoped change (one file or a handful of tightly-coupled files).
+- There is no meaningful ambiguity — the request says exactly what to do and there are no design decisions to pin down.
+- It does not decompose into independent parts that benefit from parallel builders.
+- It does not require a spec, locked tests, or an independent judge to verify fidelity.
+
+Examples that qualify: "rename this function", "add a CLI flag that does X", "fix this off-by-one", "add a field to this struct and update its usages". Examples that do NOT: "build a REST API with auth", "refactor the module system", anything with trade-offs the user should weigh in on.
+
+If fastrack applies, follow the **Fastrack flow** below. Otherwise, proceed to **Run setup** for the full pipeline.
+
+## Fastrack flow
+
+1. Create a fresh state dir: `mkdir -p ~/.gigga/run-<timestamp>/`.
+2. Write the user's request to `<state_dir>/request.txt`.
+3. Run `init` with the fastrack flag: `python3 ~/.config/opencode/gigga/scheduler.py init <state_dir> <state_dir>/request.txt --fastrack`.
+4. Call `next` — it returns `phase == "FASTTRACK"`, `agent == "gigga-builder"`.
+5. `task` → `gigga-builder` in **fastrack mode**: pass it the raw request and tell it to write its output into `<state_dir>/parts/fastrack/`. No frozen rules, no locked tests — just the request.
+6. When the builder returns, `record` `{"type":"done"}`.
+7. Report the result to the user, pointing at `<state_dir>/parts/fastrack/` for the output.
+
+That is the entire fastrack path. No spec, no attacker, no reconciler, no test author, no merge, no judge.
+
+## Run setup (full pipeline)
+
+On a new request that does NOT qualify for fastrack:
 
 1. Create a fresh state dir: `mkdir -p ~/.gigga/run-<timestamp>/` (use a real timestamp, e.g. `date +%Y%m%d-%H%M%S`).
 2. Write the user's request to `<state_dir>/request.txt`.
