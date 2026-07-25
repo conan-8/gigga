@@ -63,8 +63,8 @@ If ANY blocking → write only draft.md+questions.md. Reply line: `blocking:<N>`
 Read draft.md+questions.md+answers.md (orchestrator wrote answers). Write:
 
 1. `<state_dir>/spec/reconciled.md` — numbered rules. Every answer (user or default) = explicit rule. [ASSUMPTION] tag default-derived. Resolve ambiguity toward user answers. Single testable statement each.
-2. `<state_dir>/tasks/plan.json` — JSON array isolated parts. Count = f(complexity), spec decides:
-   - simple req (1 concern, few rules) → 2 parts.
+2. `<state_dir>/tasks/plan.json` — JSON array isolated parts. MIN 3 parts (non-fastrack; fastrack = single builder, no decomposition). Count = f(complexity), spec decides:
+   - simple req → 3 parts (floor).
    - medium → 3-4 parts.
    - complex (many rules/concerns) → 5+ parts, split fine.
    Bias: MORE small parts > few big parts. Each:
