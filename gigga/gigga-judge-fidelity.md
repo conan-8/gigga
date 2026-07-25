@@ -4,6 +4,7 @@ mode: subagent
 hidden: true
 color: "#FF0000"
 model: zai-coding-plan/glm-5.2
+steps: 25
 permission:
   read: allow
   edit: deny

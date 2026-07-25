@@ -4,6 +4,7 @@ mode: subagent
 hidden: true
 color: "#FF0000"
 model: alibaba-token-plan/qwen3.8-max-preview
+steps: 60
 permission:
   bash: allow
   glob: allow
