@@ -52,7 +52,7 @@ Read request. Write:
 - blocking: yes|no
 ```
 
-Question rules: tight, high-signal, handful. blocking:yes ONLY if wrong default wastes whole run (wrong framework/data model). Cap blocking ≤2. Every non-blocking has sensible default. Skip obvious answers.
+Question rules: tight, high-signal, handful. blocking:yes ONLY if wrong default wastes whole run (wrong framework/data model). Cap blocking ≤2. Every non-blocking has sensible default. Skip obvious answers. Questions = product behavior/requirements ONLY. NEVER ask git/commit strategy or build/impl order — pipeline builds parts parallel + merges, no per-part commits. Out of scope.
 
 If ZERO blocking → ALSO write spec/reconciled.md + tasks/plan.json now (self-apply defaults, tag [ASSUMPTION]). Reply line: `blocking:0`.
 If ANY blocking → write only draft.md+questions.md. Reply line: `blocking:<N>`.
@@ -75,6 +75,8 @@ Read draft.md+questions.md+answers.md (orchestrator wrote answers). Write:
 id stable short. title 1-line. description self-contained. acceptance concrete checkable. spec_clauses frozen clause numbers covered. dependencies part ids (keep isolated). Each part implementable alone vs rules.
 
 Granularity: one part = ONE simple concern, low complexity. Part w/ 2+ concerns or feels big → split it. Thin slice > thick chunk. More small parts = cleaner parallel build + cheaper rebuild on reject.
+
+Isolation: decompose by concern/component, NOT sequential impl steps. No "step 1→6" ordering. No per-part commit framing. Parts build parallel + merge — so each part owns DISTINCT files/modules. Many parts editing same file = merge collision → avoid; if one file holds it all, keep few parts. dependencies stay []/rare.
 
 Reply line: `DONE`.
 
