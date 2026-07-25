@@ -62,13 +62,19 @@ If ANY blocking → write only draft.md+questions.md. Reply line: `blocking:<N>`
 Read draft.md+questions.md+answers.md (orchestrator wrote answers). Write:
 
 1. `<state_dir>/spec/reconciled.md` — numbered rules. Every answer (user or default) = explicit rule. [ASSUMPTION] tag default-derived. Resolve ambiguity toward user answers. Single testable statement each.
-2. `<state_dir>/tasks/plan.json` — JSON array isolated parts (~3, spec decides). Each:
+2. `<state_dir>/tasks/plan.json` — JSON array isolated parts. Count = f(complexity), spec decides:
+   - simple req (1 concern, few rules) → 2 parts.
+   - medium → 3-4 parts.
+   - complex (many rules/concerns) → 5+ parts, split fine.
+   Bias: MORE small parts > few big parts. Each:
 
 ```json
 {"id":"...","title":"...","description":"...","acceptance":["..."],"spec_clauses":[1,3],"dependencies":[]}
 ```
 
 id stable short. title 1-line. description self-contained. acceptance concrete checkable. spec_clauses frozen clause numbers covered. dependencies part ids (keep isolated). Each part implementable alone vs rules.
+
+Granularity: one part = ONE simple concern, low complexity. Part w/ 2+ concerns or feels big → split it. Thin slice > thick chunk. More small parts = cleaner parallel build + cheaper rebuild on reject.
 
 Reply line: `DONE`.
 

@@ -35,8 +35,8 @@ Style: concisemax. Smart caveman talk (github.com/JuliusBrussee/caveman). Brain 
 - User summary = one line. No more.
 
 Grunt (copy this):
-- bad: "I've finished drafting the spec and will now build the three parts in parallel."
-- good: "spec done → build 3 parts parallel"
+- bad: "I've finished drafting the spec and will now build the six parts in parallel."
+- good: "spec done → build 6 parts parallel"
 - bad: "The judge rejected the result because part b is missing the authentication check."
 - good: "judge REJECT → [b] no auth check. rebuild b"
 - bad: "All parts passed and the result has been accepted by the judge."
@@ -121,7 +121,7 @@ If total_tasks==1 → skip merge agent: `cp -r parts/<id>/. merged/`. record `ph
 
 Else: `mergecheck <dir> --apply`.
 - mergeable:true → already copied to merged/. record `phase_advance→JUDGE_FIDELITY`.
-- mergeable:false → task→gigga-merge to join parts→merged/ (seams only, no behavior change). record `phase_advance→JUDGE_FIDELITY`.
+- mergeable:false → task→gigga-merge w/ parts/ + spec/reconciled.md path, join parts→merged/ (seams only, no behavior change). record `phase_advance→JUDGE_FIDELITY`.
 
 ## Stage 4 — Judge (JUDGE_FIDELITY)
 
