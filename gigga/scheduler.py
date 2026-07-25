@@ -6,15 +6,16 @@ Append-only journal (JSONL) so it resumes after a crash.
 
 Usage:
     scheduler.py init       <state_dir> <request_file> [--fastrack]
-    scheduler.py next       <state_dir>
-    scheduler.py record     <state_dir> <event_json_file>
+    scheduler.py next       <state_dir> [--brief]
+    scheduler.py record     <state_dir> <event_json_file> [--brief]
     scheduler.py status     <state_dir>
     scheduler.py amend      <state_dir> <amendment_json_file>
     scheduler.py revive     <state_dir> <to_phase>
     scheduler.py mergecheck <state_dir> [--apply]
+
+record accepts a JSON file holding one event object OR an array of events.
 """
 
-import hashlib
 import json
 import os
 import shutil
@@ -32,17 +33,9 @@ PHASES = [
     "SPEC_DRAFT",
     "SPEC_ATTACK",
     "SPEC_RECONCILE",
-    "SPEC_FREEZE",
     "TASK_PLAN",
-    "TASK_TEST_AUTHOR",
-    "TASK_REF_IMPL",
     "TASK_BUILD",
-    "TASK_GATES",
-    "TASK_FUZZ",
-    "TASK_MUTATE",
-    "TASK_AUDIT",
     "TASK_MERGE",
-    "JUDGE_PROMO",
     "JUDGE_FIDELITY",
     "DONE",
     "HALT",
@@ -56,11 +49,8 @@ AGENTS = {
     "SPEC_DRAFT": "gigga-spec",
     "SPEC_ATTACK": None,
     "SPEC_RECONCILE": "gigga-spec",
-    "SPEC_FREEZE": None,
     "TASK_PLAN": None,
-    "TASK_TEST_AUTHOR": "gigga-test-author",
     "TASK_BUILD": "gigga-builder",
-    "TASK_GATES": None,
     "TASK_MERGE": None,
     "JUDGE_FIDELITY": "gigga-judge-fidelity",
 }
@@ -144,8 +134,6 @@ def apply_event(state, event):
             "fastrack": bool(event.get("fastrack")),
             "task_index": 0,
             "tasks": [],
-            "spec_hash": None,
-            "spec_frozen": False,
             "amendments": [],
             "escalation": "initial",
             "attempts": 0,
@@ -169,11 +157,6 @@ def apply_event(state, event):
     if etype == "task_plan":
         state["tasks"] = event["tasks"]
         state["task_index"] = 0
-        return state
-
-    if etype == "spec_frozen":
-        state["spec_frozen"] = True
-        state["spec_hash"] = event["hash"]
         return state
 
     if etype == "amendment":
@@ -272,7 +255,7 @@ def cmd_init(state_dir, request_file, fastrack=False):
     print(json.dumps({"ok": True, "run_id": run_id, "phase": state["phase"], "fastrack": fastrack, "state_dir": str(sd)}))
 
 
-def build_next_result(state):
+def build_next_result(state, brief=False):
     phase = state["phase"]
     agent = AGENTS.get(phase)
     escalation = state["escalation"]
@@ -284,11 +267,17 @@ def build_next_result(state):
         task_id = state["tasks"][idx].get("id", f"task-{idx}")
         task_info = state["tasks"][idx]
 
-    if phase in ("TASK_GATES", "TASK_MERGE", "SPEC_FREEZE"):
-        agent = None
-
-    if escalation == "hard" and phase == "TASK_BUILD":
-        agent = "gigga-builder"
+    if brief:
+        result = {
+            "phase": phase,
+            "agent": agent,
+            "task_id": task_id,
+            "escalation": escalation,
+            "attempts": state["attempts"],
+        }
+        if phase == "HALT":
+            result["halt_reason"] = state.get("halt_reason", "unknown")
+        return result
 
     result = {
         "phase": phase,
@@ -300,8 +289,6 @@ def build_next_result(state):
         "total_tasks": len(state["tasks"]),
         "attempts": state["attempts"],
         "amendments_filed": len(state["amendments"]),
-        "spec_frozen": state["spec_frozen"],
-        "spec_hash": state["spec_hash"],
         "run_id": state["run_id"],
         "request": state["request"],
         "fastrack": state.get("fastrack", False),
@@ -314,7 +301,7 @@ def build_next_result(state):
     return result
 
 
-def cmd_next(state_dir):
+def cmd_next(state_dir, brief=False):
     state = load_state(state_dir)
     if state is None:
         state = replay_journal(state_dir)
@@ -327,7 +314,7 @@ def cmd_next(state_dir):
         append_journal(state_dir, {"type": "halt", "reason": halt})
         state = replay_journal(state_dir)
 
-    print(json.dumps(build_next_result(state), indent=2))
+    print(json.dumps(build_next_result(state, brief=brief), indent=2))
 
 
 def build_autopsy(state):
@@ -342,15 +329,13 @@ def build_autopsy(state):
         "tasks": state["tasks"],
         "task_index": state["task_index"],
         "no_progress_count": state["no_progress_count"],
-        "spec_hash": state["spec_hash"],
         "fastrack": state.get("fastrack", False),
     }
 
 
-def cmd_record(state_dir, event_file):
-    event = json.loads(Path(event_file).read_text())
-    etype = event.get("type", "progress")
-    event["type"] = etype
+def cmd_record(state_dir, event_file, brief=False):
+    raw = json.loads(Path(event_file).read_text())
+    events = raw if isinstance(raw, list) else [raw]
 
     state = load_state(state_dir)
     if state is None:
@@ -359,7 +344,10 @@ def cmd_record(state_dir, event_file):
         print(json.dumps({"error": "no state; run init first"}))
         sys.exit(1)
 
-    append_journal(state_dir, event)
+    for ev in events:
+        ev.setdefault("type", "progress")
+        append_journal(state_dir, ev)
+
     state = replay_journal(state_dir)
 
     halt = check_halt_conditions(state)
@@ -367,9 +355,8 @@ def cmd_record(state_dir, event_file):
         append_journal(state_dir, {"type": "halt", "reason": halt})
         state = replay_journal(state_dir)
 
-    result = build_next_result(state)
+    result = build_next_result(state, brief=brief)
     result["ok"] = True
-    result["seq"] = event.get("seq")
     print(json.dumps(result, indent=2))
 
 
@@ -514,12 +501,14 @@ def main():
         fastrack = "--fastrack" in sys.argv[4:]
         cmd_init(state_dir, sys.argv[3], fastrack=fastrack)
     elif cmd == "next":
-        cmd_next(state_dir)
+        brief = "--brief" in sys.argv[3:]
+        cmd_next(state_dir, brief=brief)
     elif cmd == "record":
         if len(sys.argv) < 4:
-            print("usage: scheduler.py record <state_dir> <event_json_file>")
+            print("usage: scheduler.py record <state_dir> <event_json_file> [--brief]")
             sys.exit(1)
-        cmd_record(state_dir, sys.argv[3])
+        brief = "--brief" in sys.argv[4:]
+        cmd_record(state_dir, sys.argv[3], brief=brief)
     elif cmd == "status":
         cmd_status(state_dir)
     elif cmd == "amend":

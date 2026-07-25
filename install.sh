@@ -9,7 +9,6 @@ BASE="${GIGGA_BASE:-https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}
 AGENTS=(
   gigga
   gigga-spec
-  gigga-test-author
   gigga-builder
   gigga-merge
   gigga-judge-fidelity
@@ -25,7 +24,6 @@ Environment variables for model customization:
   GIGGA_MODEL              Default model for ALL agents
   GIGGA_MODEL_ORCHESTRATOR Model for the orchestrator (gigga)
   GIGGA_MODEL_SPEC         Model for the planner (gigga-spec)
-  GIGGA_MODEL_TEST_AUTHOR  Model for the test author (gigga-test-author)
   GIGGA_MODEL_BUILDER      Model for the builder (gigga-builder)
   GIGGA_MODEL_MERGE        Model for the integrator (gigga-merge)
   GIGGA_MODEL_JUDGE        Model for the judge (gigga-judge-fidelity)
@@ -48,9 +46,9 @@ for arg in "$@"; do
 done
 
 if [ "$GLOBAL" -eq 1 ]; then
-  AGENT_DIR="$HOME/.config/opencode/agents"
+  AGENT_DIR="$HOME/.config/opencode/agent"
 else
-  AGENT_DIR=".opencode/agents"
+  AGENT_DIR=".opencode/agent"
 fi
 SCHEDULER_DIR="$HOME/.config/opencode/gigga"
 
@@ -70,7 +68,6 @@ model_for() {
   case "$name" in
     gigga)              echo "${GIGGA_MODEL_ORCHESTRATOR:-${GIGGA_MODEL:-}}" ;;
     gigga-spec)         echo "${GIGGA_MODEL_SPEC:-${GIGGA_MODEL:-}}" ;;
-    gigga-test-author)  echo "${GIGGA_MODEL_TEST_AUTHOR:-${GIGGA_MODEL:-}}" ;;
     gigga-builder)      echo "${GIGGA_MODEL_BUILDER:-${GIGGA_MODEL:-}}" ;;
     gigga-merge)        echo "${GIGGA_MODEL_MERGE:-${GIGGA_MODEL:-}}" ;;
     gigga-judge-fidelity) echo "${GIGGA_MODEL_JUDGE:-${GIGGA_MODEL:-}}" ;;
