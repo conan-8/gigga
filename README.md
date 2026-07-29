@@ -1,112 +1,38 @@
 # GIGGA
 
-GIGGA is a spec-locked build pipeline for [opencode](https://opencode.ai).
-Switch to the `gigga` agent with **Tab**, give it a request, and it drives a plain-code
-state machine (`scheduler.py`) through the pipeline:
+GIGGA is a `mode: primary` orchestrator agent. Switch to it with **Tab**, then give it a request.
 
-1. **Spec pack** — one AI drafts the spec AND self-attacks it, producing questions with
-   default assumptions. Only truly blocking questions (max 2) are asked; everything else
-   proceeds on documented defaults. With no blocking questions, the same call also
-   reconciles the rules and decomposes the work in one pass.
-2. **Fork** — each isolated part is built by its own builder, in parallel. Each builder
-   reports a syntax-check exit code as an objective floor.
-3. **Integrate** — if parts are structurally disjoint, they are copied together with no
-   AI involved; otherwise a fresh AI fixes the seams. Single-part runs skip this.
-4. **Reject-only review** — an independent judge (different model) compares the result
-   to the original request and can only reject, tagging each defect with the responsible
-   part so rebuilds stay targeted.
+It creates a fresh run directory at `~/.gigga/run-<timestamp>/` and drives `scheduler.py`
+through a spec-locked pipeline anchored to a git repository:
 
-The orchestrator never edits code itself; it only runs commands and records events. Pass/fail
-comes from builder exit codes plus the reject-only judge — no AI ever grades its own work.
-Default assumptions are disclosed at delivery; if one is wrong, a targeted amendment loop
-re-reconciles and rebuilds only what changed.
+1. **Spec** — the planner inspects the repo (recon), drafts clauses, attacks ambiguities with questions, reconciles answers into frozen rules, and decomposes into isolated parts anchored to real files.
+2. **Build** — each part gets its own git worktree branched off the baseline SHA. Builders have full repo visibility but edit only their worktree. The scheduler runs an objective check ladder (typecheck → lint → unit → e2e) per part; builder self-reports are advisory only.
+3. **Merge** — a fresh AI joins the parts, fixing only the seams.
+4. **Judge** — an independent judge compares the result to the original request and can only reject.
+5. **Apply** — part branches are merged into `gigga/<run_id>/result`, a diffstat is reported, and worktrees are cleaned up. The user's working tree and branch are never touched.
 
-## What's in the box
+The orchestrator never edits code itself; it only runs commands and records events. Pass/fail is
+objective (scheduler-run check exit codes) plus the reject-only judge — no AI ever grades its own work.
 
-| File | Role |
-| --- | --- |
-| `gigga.md` | Master orchestrator (`mode: primary`). Switch to it with Tab. |
-| `gigga-spec.md` | Planner — drafts the spec pack, reconciles + decomposes, rewrites failing parts. |
-| `gigga-builder.md` | Implements one isolated part against the rules; reports a syntax-check exit code. |
-| `gigga-merge.md` | Joins the finished parts and fixes the seams (skipped when parts are disjoint). |
-| `gigga-judge-fidelity.md` | Independent reject-only reviewer (the gate). |
-| `gigga-checker.md` | Quick-fix sanity checker (used only in post-HALT recovery). |
-| `gigga-config.md` | Interactive model configurator. Switch to it with Tab to change agent models. |
-| `scheduler.py` | The plain-code state machine the orchestrator drives. |
+## Init
 
-The seven `.md` files are opencode agents; `scheduler.py` is the state machine they run against.
-
-## Requirements
-
-- [opencode](https://opencode.ai)
-- `curl`
-- `python3` (for `scheduler.py`)
-
-## Install
-
-> **Note:** agent files go into your opencode `agent/` directory, while `scheduler.py`
-> always installs to `~/.config/opencode/gigga/` because the orchestrator references it at that
-> exact path. `install.sh` handles both.
-
-### One-line install
-
-```bash
-# project-local (run from your project root)
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/install.sh" | bash
-
-# global (available in every project)
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/install.sh" | bash -s -- --global
+```
+scheduler.py init <state_dir> <request_file> --repo <path> [--fastrack] [--allow-dirty] [--checks <file>]
 ```
 
-Re-run the same command any time to update.
+`--repo` is required. The repo must be clean (or pass `--allow-dirty`). At init the scheduler
+captures `baseline_sha`, `baseline_branch`, and auto-detects a check ladder from the repo
+(package.json, tsconfig, vitest/jest/playwright config, pyproject, go.mod, Cargo.toml).
+Override detection with `--checks <file>`.
 
-### Model customization
+## Key commands
 
-The install script supports per-agent model overrides via environment variables:
-
-```bash
-# custom model for all agents
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/install.sh" | GIGGA_MODEL=openai/gpt-5.2 bash
-
-# custom model for all, but a different judge
-curl -fsSL "https://raw.githubusercontent.com/conan-8/gigga/main/install.sh" | GIGGA_MODEL=openai/gpt-5.2 GIGGA_MODEL_JUDGE=anthropic/claude-sonnet-4-20250514 bash
-```
-
-| Variable | Agent |
-| --- | --- |
-| `GIGGA_MODEL` | Default for ALL agents |
-| `GIGGA_MODEL_ORCHESTRATOR` | `gigga` (orchestrator) |
-| `GIGGA_MODEL_SPEC` | `gigga-spec` (planner) |
-| `GIGGA_MODEL_BUILDER` | `gigga-builder` |
-| `GIGGA_MODEL_MERGE` | `gigga-merge` (integrator) |
-| `GIGGA_MODEL_JUDGE` | `gigga-judge-fidelity` |
-| `GIGGA_MODEL_CHECKER` | `gigga-checker` |
-| `GIGGA_MODEL_CONFIG` | `gigga-config` (configurator) |
-
-Per-agent vars override `GIGGA_MODEL`.
-
-### Manual install
-
-Copy the files yourself:
-
-1. Copy the seven `gigga*.md` files from [`gigga/`](gigga/) into your project's `.opencode/agent/`
-   (or `~/.config/opencode/agent/` for global use).
-2. Copy [`gigga/scheduler.py`](gigga/scheduler.py) into `~/.config/opencode/gigga/`.
-
-```bash
-# project-local example
-mkdir -p .opencode/agent ~/.config/opencode/gigga
-cp gigga/gigga*.md .opencode/agent/
-cp gigga/scheduler.py ~/.config/opencode/gigga/
-```
+| Command | Purpose |
+|---|---|
+| `worktree <dir> create <id>` | Create a git worktree for a part, branched off baseline |
+| `check <dir> --part <id>` | Run the check ladder in a part's worktree |
+| `apply <dir>` | Merge part branches into a delivery branch |
+| `diff <dir>` | Print diff against baseline |
+| `rollback <dir>` | Delete all run branches and worktrees |
 
 > **Note:** new agent files require an opencode restart to take effect.
-
-## Usage
-
-Restart opencode, press **Tab** until you reach the `gigga` agent, and give it a request.
-
-## Changing models after install
-
-Switch to the `gigga-config` agent with **Tab**. It shows every GIGGA agent's current
-model and lets you pick new ones interactively. Restart opencode after changing models.

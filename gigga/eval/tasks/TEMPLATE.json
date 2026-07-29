@@ -1,0 +1,11 @@
+{
+  "name": "TEMPLATE",
+  "title": "Short human-readable title",
+  "category": "bugfix|feature|refactor|schema|phase|underspecified",
+  "repo": "/absolute/path/to/repo",
+  "baseline_sha": "commit to start from",
+  "ground_truth_sha": "commit with the known-correct result (null if underspecified)",
+  "prompt": "The task as a user would write it. Natural language, no spec-speak.",
+  "test_state_at_baseline": "passing|failing|mixed|none",
+  "notes": "Any context for the human scorer."
+}
